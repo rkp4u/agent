@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: crypto-agent
+
+langchain4j:
+  open-ai:
+    chat-model:
+      api-key: ${OPENAI_API_KEY}
+      model-name: gpt-4o-mini
+      temperature: 0.7
+      log-requests: true
+      log-responses: true
+
+# Logging configuration
+logging:
+  level:
+    root: INFO
+    org.example: DEBUG
+    dev.langchain4j: DEBUG
+    dev.langchain4j.service: DEBUG
+    dev.langchain4j.agent: DEBUG
+    dev.langchain4j.mcp: DEBUG
+
+# Server configuration
+server:
+  port: 8080
+
