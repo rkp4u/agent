@@ -1,152 +1,182 @@
-# Crypto Agent
+# ☕ Singapore Kopitiam Chatter
 
-An AI-powered cryptocurrency assistant built with Spring Boot, LangChain4j, and the CoinGecko MCP server.
+Ever wondered what it would be like if four Singapore kopitiam regulars could chat amongst themselves — powered by AI? That's exactly what this project does.
 
-## Tech Stack
-
-- **Java 21** + **Spring Boot 3.4.1**
-- **LangChain4j 1.1.0-beta7** — AI services & MCP client
-- **OpenAI GPT-4o-mini** — LLM
-- **CoinGecko MCP** — Real-time crypto data via Model Context Protocol
+**Singapore Kopitiam Chatter** is a multi-agent conversation system where four distinct AI personas engage in natural, lively banter at a virtual kopitiam (Singapore coffee shop). An orchestrator LLM manages the flow, picks who speaks next, and the whole thing wraps up with an AI-generated summary of the conversation.
 
 ---
 
-## Setup
+## 🧑‍🤝‍🧑 Meet the Regulars
+
+| Persona | Who They Are |
+|---|---|
+| **Uncle Ah Seng** | 68-year-old kopi uncle. 30+ years running the drinks stall. Speaks heavy Singlish. Complains about rising costs. |
+| **Mei Qi** | 21-year-old content creator. Always on her phone, posting about kopitiam life. Uses OMG and yasss liberally. |
+| **Bala Nair** | 45-year-old ex-statistician turned football tipster. Sees patterns in everything. Dry humour. |
+| **Dr. Tan** | 72-year-old retired philosophy professor. Thoughtful, deep, sips his kopi-o slowly. |
+
+---
+
+## 🏗️ How It Works
+
+The system is built as a state machine graph using **LangGraph4j**, where each node is an agent with a specific role:
+
+```
+START → human (inject opening message)
+          ↓
+      orchestrator (LLM picks who speaks next)
+          ↓
+      participant (selected persona responds)
+          ↓
+      orchestrator → ... (loops for N volleys)
+          ↓
+      summarizer → END
+```
+
+1. **Human node** — Seeds the conversation with an opening line and sets the volley count (how many turns the AI will take).
+2. **Orchestrator node** — Calls GPT-4o-mini to decide which persona should speak next, based on conversation history.
+3. **Participant node** — The selected persona generates a response in character, optionally using tools (time, weather, news).
+4. **Summarizer node** — Once volleys are exhausted, generates a conversation summary and ends the graph.
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Java 21 |
+| Framework | Spring Boot 3.4.1 |
+| Graph / Orchestration | LangGraph4j 1.8.4 |
+| LLM | LangChain4j 1.1.0 + OpenAI GPT-4o-mini |
+| Build | Gradle (Kotlin DSL) |
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
 - Java 21+
-- Gradle
-- OpenAI API key
+- An OpenAI API key
 
-### Environment Variables
+### 1. Set your API key
 
-Copy the example env file and fill in your key:
-
-```bash
-cp .env.example .env
-```
-
-Then edit `.env`:
-
-```env
-OPENAI_API_KEY=sk-your-openai-api-key-here
-```
-
-> ⚠️ `.env` is in `.gitignore` and will **never be pushed** to GitHub. Only `.env.example` is committed.
-
-### Run
+The app reads your OpenAI key from the `OPENAI_API_KEY` environment variable:
 
 ```bash
-# Load env vars then run
-export $(cat .env | xargs) && ./gradlew bootRun
+export OPENAI_API_KEY=sk-your-key-here
 ```
 
-The server starts on **http://localhost:8080**
+Alternatively, you can hardcode it directly in `src/main/resources/application.yml` (not recommended for production).
 
----
+### 2. Build the project
 
-## API Endpoints
-
-### POST `/api/crypto/ask`
-
-Send a natural language query to the crypto agent.
-
-**Request:**
 ```bash
-curl -X POST http://localhost:8080/api/crypto/ask \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "What is the current price of Bitcoin?"}'
+./gradlew build
 ```
 
-**Response:**
+### 3. Run it
+
+```bash
+./gradlew bootRun
+```
+
+The app starts on **port 8080**.
+
+### 4. Start a conversation
+
+Hit this endpoint in your browser or with `curl`:
+
+```bash
+curl http://localhost:8080/api/graph/invoke
+```
+
+Sit back and watch the logs — the full kopitiam conversation plays out, and you'll get a JSON response once it's done:
+
 ```json
 {
-  "prompt": "What is the current price of Bitcoin?",
-  "response": "The current price of Bitcoin is $84,231.00 USD.",
-  "toolsUsed": "1"
+  "status": "completed",
+  "message": "Conversation ended successfully. Thank you! Come back to kopitiam anytime lah!"
 }
 ```
 
 ---
 
-### More Example Queries
+## 📁 Project Structure
 
-**Get Ethereum price:**
-```bash
-curl -X POST http://localhost:8080/api/crypto/ask \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "What is the current price of Ethereum?"}'
 ```
-
-**Compare Bitcoin and Ethereum:**
-```bash
-curl -X POST http://localhost:8080/api/crypto/ask \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Compare the prices of Bitcoin and Ethereum"}'
-```
-
-**Get trending coins:**
-```bash
-curl -X POST http://localhost:8080/api/crypto/ask \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "What are the trending cryptocurrencies today?"}'
-```
-
-**Get top gainers:**
-```bash
-curl -X POST http://localhost:8080/api/crypto/ask \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "What are the top gaining coins in the last 24 hours?"}'
-```
-
-**Get market overview:**
-```bash
-curl -X POST http://localhost:8080/api/crypto/ask \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Give me a global crypto market overview"}'
-```
-
-**Get coin market data:**
-```bash
-curl -X POST http://localhost:8080/api/crypto/ask \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "What is the market cap and 24h volume of Solana?"}'
+src/main/java/org/example/
+├── Main.java                    # Spring Boot entry point
+├── config/
+│   └── PersonaRegistry.java     # Defines all 4 persona configs
+├── controller/
+│   ├── GraphController.java     # POST /api/graph/invoke
+│   └── PersonaController.java   # Persona inspection endpoints
+├── graph/
+│   ├── KopitiamGraph.java       # Builds the LangGraph4j state graph
+│   └── KopitiamState.java       # Shared state (messages, volley count, next speaker)
+├── model/
+│   └── Persona.java             # Persona data model
+├── nodes/
+│   ├── OrchestratorNode.java    # Calls LLM to pick the next speaker
+│   └── SummarizerNode.java      # Generates the end-of-conversation summary
+├── service/
+│   ├── GraphService.java        # Wires up and runs the graph
+│   ├── OrchestratorService.java # Speaker selection logic
+│   ├── ParticipantService.java  # ReAct loop for each persona
+│   └── SummarizerService.java   # Summary generation
+└── tools/
+    ├── SingaporeNewsService.java    # Fetches Singapore news headlines
+    ├── SingaporeTimeService.java    # Returns current Singapore time
+    ├── SingaporeWeatherService.java # Returns Singapore weather info
+    └── ToolExecutor.java            # Routes tool calls to the right service
 ```
 
 ---
 
-### GET `/api/crypto/health`
+## ⚙️ Configuration
 
-Health check endpoint.
+Key settings are in `src/main/resources/application.yml`:
 
-```bash
-curl http://localhost:8080/api/crypto/health
+| Setting | Default | Description |
+|---|---|---|
+| `langchain4j.open-ai.chat-model.model-name` | `gpt-4o-mini` | The OpenAI model to use |
+| `langchain4j.open-ai.chat-model.temperature` | `0.7` | Controls response creativity |
+| `server.port` | `8080` | Port the app listens on |
+
+The number of conversation turns is controlled by `DEFAULT_VOLLEYS` in `KopitiamGraph.java` (default: **4 turns**). Increase it for longer conversations.
+
+---
+
+## 💡 Example Conversation
+
+Here's what a typical run looks like in the logs:
+
 ```
+[orchestrator] Selected: ah_seng
+[ah_seng]  Wah, today very hot lah! Must drink more kopi, keep awake lor.
 
-**Response:**
-```json
-{
-  "status": "UP",
-  "service": "crypto-agent"
-}
+[orchestrator] Selected: mei_qi
+[mei_qi]   Yasss, kopi is life! ☕️ Did anyone try the new prata stall? Cheese prata is da bomb! 🤤
+
+[orchestrator] Selected: bala
+[bala]     Ah, kopi and prata — the quintessential Singaporean combination. 
+           I'll need to analyse the data before endorsing the cheese prata, though.
+
+[summarizer] Kopitiam Banter Summary: The group bonded over hot weather, rising kopi prices, 
+             and excitement about a new prata stall. Mood: upbeat. Cultural pride: high.
 ```
 
 ---
 
-## Notes
+## 🤝 Contributing
 
-### CoinGecko Free Tier
-- The app uses the **free public CoinGecko MCP server** (`https://mcp.api.coingecko.com/sse`)
-- No API key required
-- Free tier has rate limits — the app automatically retries up to **3 times** with a **5 second delay** between attempts
-- For higher limits, use the [CoinGecko Pro MCP server](https://mcp.pro-api.coingecko.com) with your own API key
+Feel free to:
+- Add new personas in `PersonaRegistry.java`
+- Add new tools in the `tools/` package and register them in `ToolExecutor.java`
+- Tweak the orchestrator prompt in `OrchestratorNode.java` to change conversation dynamics
 
-### MCP Endpoints
-| Endpoint | Purpose |
-|---|---|
-| `https://mcp.api.coingecko.com/sse` | SSE (used by this app) |
-| `https://mcp.api.coingecko.com/mcp` | HTTP Streaming (primary) |
-| `https://mcp.pro-api.coingecko.com` | Pro tier (requires API key) |
+---
 
+*Alamak, what are you waiting for? Go run it lah!* ☕
 

@@ -24,13 +24,21 @@ dependencies {
     // LangChain4j BOM — manages versions of ALL core modules
     implementation(platform("dev.langchain4j:langchain4j-bom:1.1.0"))
 
-    // ✅ Core modules — versions auto-resolved by BOM
-    implementation("dev.langchain4j:langchain4j-mcp")
+    // Core modules — versions auto-resolved by BOM
+    implementation("dev.langchain4j:langchain4j")
     implementation("dev.langchain4j:langchain4j-open-ai")
 
-    // ✅ Spring Boot Starters with OpenAI autoconfiguration
+    // Spring Boot Starters with OpenAI autoconfiguration
     implementation("dev.langchain4j:langchain4j-spring-boot-starter:1.1.0-beta7")
     implementation("dev.langchain4j:langchain4j-open-ai-spring-boot-starter:1.1.0-beta7")
+
+    // LangGraph4j - State machine graph for multi-agent orchestration
+    implementation("org.bsc.langgraph4j:langgraph4j-core:1.8.4")
+
+
+    // Lombok for annotations like @Slf4j
+    compileOnly("org.projectlombok:lombok")
+    annotationProcessor("org.projectlombok:lombok")
 
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")

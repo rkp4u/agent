@@ -1,8 +1,6 @@
+
 .gradle
 build/
-
-# Secrets — never push
-.env
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/

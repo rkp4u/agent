@@ -11,16 +11,6 @@ langchain4j:
       log-requests: true
       log-responses: true
 
-# Logging configuration
-logging:
-  level:
-    root: INFO
-    org.example: DEBUG
-    dev.langchain4j: DEBUG
-    dev.langchain4j.service: DEBUG
-    dev.langchain4j.agent: DEBUG
-    dev.langchain4j.mcp: DEBUG
-
 # Server configuration
 server:
   port: 8080
