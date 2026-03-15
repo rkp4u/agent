@@ -1,54 +1,89 @@
 # ☕ Singapore Kopitiam Chatter
 
-Ever wondered what it would be like if four Singapore kopitiam regulars could chat amongst themselves — powered by AI? That's exactly what this project does.
+A multi-agent AI conversation system where four distinct Singapore kopitiam regulars chat amongst themselves — orchestrated by an LLM, evaluated by a judge, and persisted across sessions.
 
-**Singapore Kopitiam Chatter** is a multi-agent conversation system where four distinct AI personas engage in natural, lively banter at a virtual kopitiam (Singapore coffee shop). An orchestrator LLM manages the flow, picks who speaks next, and the whole thing wraps up with an AI-generated summary of the conversation.
+Built on **Spring Boot + LangChain4j + LangGraph4j**.
 
 ---
 
 ## 🧑‍🤝‍🧑 Meet the Regulars
 
-| Persona | Who They Are |
-|---|---|
-| **Uncle Ah Seng** | 68-year-old kopi uncle. 30+ years running the drinks stall. Speaks heavy Singlish. Complains about rising costs. |
-| **Mei Qi** | 21-year-old content creator. Always on her phone, posting about kopitiam life. Uses OMG and yasss liberally. |
-| **Bala Nair** | 45-year-old ex-statistician turned football tipster. Sees patterns in everything. Dry humour. |
-| **Dr. Tan** | 72-year-old retired philosophy professor. Thoughtful, deep, sips his kopi-o slowly. |
+| Persona | Age | Background | Speech Style | Tools |
+|---|---|---|---|---|
+| **Uncle Ah Seng** | 68 | 30+ years running the drinks stall. Pragmatic, thrifty, complains about costs. | Heavy Singlish — lah, lor, wah | `time`, `weather` |
+| **Mei Qi** | 21 | Content creator promoting kopitiam online. Social media savvy, very chatty. | Mix of English and Singlish — OMG, yasss, emojis | `time`, `news` |
+| **Bala Nair** | 45 | Ex-statistician turned football tipster. Sees patterns in everything. Dry humour. | Formal English with occasional Singlish, statistical references | `time` |
+| **Dr. Tan** | 72 | Retired philosophy professor. Thoughtful, deep, sips his kopi-o slowly. | Measured English with philosophical tangents | _(none)_ |
 
 ---
 
-## 🏗️ How It Works
+## 🏗️ System Architecture
 
-The system is built as a state machine graph using **LangGraph4j**, where each node is an agent with a specific role:
+### Graph Topology
 
 ```
-START → human (inject opening message)
-          ↓
-      orchestrator (LLM picks who speaks next)
-          ↓
-      participant (selected persona responds)
-          ↓
-      orchestrator → ... (loops for N volleys)
-          ↓
-      summarizer → END
+START
+  │
+  ▼
+[human_node]          ← Seeds the opening message + sets volley count
+  │
+  ▼
+[orchestrator_node]   ← LLM picks who speaks next
+  │
+  ├─ volley > 0 ──► [participant_node]  ← Selected persona responds (ReAct loop)
+  │                       │
+  │                       └──────────────► [orchestrator_node]  (loops)
+  │
+  └─ volley = 0 ──► [summarizer_node]   ← Generates conversation summary
+                          │
+                          ▼
+                   [evaluator_node]      ← LLM-as-Judge scores the conversation
+                          │
+                         END
 ```
 
-1. **Human node** — Seeds the conversation with an opening line and sets the volley count (how many turns the AI will take).
-2. **Orchestrator node** — Calls GPT-4o-mini to decide which persona should speak next, based on conversation history.
-3. **Participant node** — The selected persona generates a response in character, optionally using tools (time, weather, news).
-4. **Summarizer node** — Once volleys are exhausted, generates a conversation summary and ends the graph.
+### Node Responsibilities
+
+| Node | Class | What It Does |
+|---|---|---|
+| `human_node` | inline in `KopitiamGraph` | Seeds `messages` with the user's opening message and resets `volley_msg_left` |
+| `orchestrator_node` | `OrchestratorNode` | Calls GPT-4o-mini to select the next speaker based on conversation history |
+| `participant_node` | `ParticipantService` | Runs a ReAct loop — the selected persona may call tools before responding |
+| `summarizer_node` | `SummarizerNode` | Generates a narrative summary of the full conversation |
+| `evaluator_node` | `EvaluatorNode` | Scores the conversation on 3 dimensions and returns a JSON scorecard |
+
+### Session Persistence (MemorySaver)
+
+Every request carries an `X-Session-Id` header. The compiled graph is a **Spring singleton** with a `MemorySaver` checkpointer attached. Each session ID maps to its own checkpoint thread — so the same session ID on a follow-up request resumes the exact conversation state (message history, volley count, next speaker) from where it left off.
+
+```
+Request 1  X-Session-Id: abc  →  MemorySaver stores checkpoint["abc"]
+Request 2  X-Session-Id: abc  →  MemorySaver restores checkpoint["abc"] → conversation continues
+Request 3  X-Session-Id: xyz  →  No checkpoint["xyz"] → fresh conversation
+```
+
+### Tools
+
+Each persona has access to a subset of real-time tools, called via a simple `TOOL:<name>` protocol in the ReAct loop:
+
+| Tool | Class | Returns |
+|---|---|---|
+| `time` | `SingaporeTimeService` | Current Singapore time (SGT) |
+| `weather` | `SingaporeWeatherService` | Current Singapore weather summary |
+| `news` | `SingaporeNewsService` | Recent Singapore news headlines |
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Language | Java 21 |
-| Framework | Spring Boot 3.4.1 |
-| Graph / Orchestration | LangGraph4j 1.8.4 |
-| LLM | LangChain4j 1.1.0 + OpenAI GPT-4o-mini |
-| Build | Gradle (Kotlin DSL) |
+| Layer | Technology | Version |
+|---|---|---|
+| Language | Java | 21 |
+| Framework | Spring Boot | 3.4.1 |
+| Graph / Orchestration | LangGraph4j | 1.8.4 |
+| LLM Client | LangChain4j | 1.1.0 / 1.1.0-beta7 |
+| LLM Model | OpenAI GPT-4o-mini | — |
+| Build | Gradle Kotlin DSL | — |
 
 ---
 
@@ -59,45 +94,99 @@ START → human (inject opening message)
 - Java 21+
 - An OpenAI API key
 
-### 1. Set your API key
+### Step 1 — Set your OpenAI API key
 
-The app reads your OpenAI key from the `OPENAI_API_KEY` environment variable:
+The application requires an `OPENAI_API_KEY` environment variable. Without it the app will not start.
 
 ```bash
 export OPENAI_API_KEY=sk-your-key-here
 ```
 
-Alternatively, you can hardcode it directly in `src/main/resources/application.yml` (not recommended for production).
+You can also prefix it inline when running:
 
-### 2. Build the project
+```bash
+OPENAI_API_KEY=sk-your-key-here ./gradlew bootRun
+```
+
+> **Note:** Never paste your key into `application.yml` directly. The file uses
+> `${OPENAI_API_KEY}` so it always reads from the environment.
+
+### Step 2 — Build the project
 
 ```bash
 ./gradlew build
 ```
 
-### 3. Run it
+### Step 3 — Run the application
 
 ```bash
 ./gradlew bootRun
 ```
 
-The app starts on **port 8080**.
+Or, if you want to pass the API key inline without exporting:
 
-### 4. Start a conversation
+```bash
+OPENAI_API_KEY=sk-your-key-here ./gradlew bootRun
+```
 
-Hit this endpoint in your browser or with `curl`:
+The app starts on **http://localhost:8080**.
+
+### Step 4 — Start a conversation
 
 ```bash
 curl http://localhost:8080/api/graph/invoke
 ```
 
-Sit back and watch the logs — the full kopitiam conversation plays out, and you'll get a JSON response once it's done:
+The four regulars will chatter away. When done, you receive a JSON response:
 
 ```json
 {
   "status": "completed",
-  "message": "Conversation ended successfully. Thank you! Come back to kopitiam anytime lah!"
+  "sessionId": "3f7a2b1c-49de-4a1b-bf23-9c1e7d8a0f22",
+  "evaluation": {
+    "character_consistency":     { "score": 5, "reason": "Each agent stayed firmly in character throughout." },
+    "conversation_naturalness":  { "score": 4, "reason": "The banter flowed organically with good topic transitions." },
+    "tool_usage_correctness":    { "score": 5, "reason": "Tools were only invoked when real-time data was genuinely needed." },
+    "overall": 5,
+    "summary": "A lively and authentic kopitiam conversation with strong character voices and natural flow."
+  },
+  "message": "Conversation ended successfully. Come back anytime lah!"
 }
+```
+
+---
+
+## 📡 API Reference
+
+### `GET /api/graph/invoke`
+
+Starts a new kopitiam conversation or resumes an existing session.
+
+| Parameter | Type | Where | Required | Default | Description |
+|---|---|---|---|---|---|
+| `X-Session-Id` | `string` | Header | No | auto UUID | Session identifier. Reuse to resume a previous conversation. |
+| `message` | `string` | Query param | No | `"Hello everyone! What's happening at the kopitiam today?"` | The opening message injected into the conversation. |
+
+**Example — new session with default greeting:**
+```bash
+curl http://localhost:8080/api/graph/invoke
+```
+
+**Example — new session with a custom topic:**
+```bash
+curl "http://localhost:8080/api/graph/invoke?message=What+do+you+all+think+about+the+new+MRT+line"
+```
+
+**Example — resume a previous session:**
+```bash
+curl -H "X-Session-Id: 3f7a2b1c-49de-4a1b-bf23-9c1e7d8a0f22" \
+     "http://localhost:8080/api/graph/invoke?message=What+did+Ah+Seng+say+earlier"
+```
+
+**Example — pin your own session ID:**
+```bash
+curl -H "X-Session-Id: my-kopitiam-session" \
+     http://localhost:8080/api/graph/invoke
 ```
 
 ---
@@ -106,75 +195,92 @@ Sit back and watch the logs — the full kopitiam conversation plays out, and yo
 
 ```
 src/main/java/org/example/
-├── Main.java                    # Spring Boot entry point
+├── Main.java
 ├── config/
-│   └── PersonaRegistry.java     # Defines all 4 persona configs
+│   └── PersonaRegistry.java        # Defines all 4 persona configs (name, background, tools)
 ├── controller/
-│   ├── GraphController.java     # POST /api/graph/invoke
-│   └── PersonaController.java   # Persona inspection endpoints
+│   ├── GraphController.java        # GET /api/graph/invoke — session + message routing
+│   └── PersonaController.java      # Persona inspection endpoints
 ├── graph/
-│   ├── KopitiamGraph.java       # Builds the LangGraph4j state graph
-│   └── KopitiamState.java       # Shared state (messages, volley count, next speaker)
+│   ├── KopitiamGraph.java          # @Configuration — builds and exposes the compiled graph @Bean
+│   └── KopitiamState.java          # Shared state: messages (appender), volley_msg_left, next_speaker, evaluation
 ├── model/
-│   └── Persona.java             # Persona data model
+│   └── Persona.java                # Persona data model
 ├── nodes/
-│   ├── OrchestratorNode.java    # Calls LLM to pick the next speaker
-│   └── SummarizerNode.java      # Generates the end-of-conversation summary
+│   ├── OrchestratorNode.java       # Speaker selection via LLM
+│   ├── SummarizerNode.java         # End-of-conversation summary
+│   └── EvaluatorNode.java          # LLM-as-Judge scoring node
 ├── service/
-│   ├── GraphService.java        # Wires up and runs the graph
-│   ├── OrchestratorService.java # Speaker selection logic
-│   ├── ParticipantService.java  # ReAct loop for each persona
-│   └── SummarizerService.java   # Summary generation
+│   ├── GraphService.java           # Invokes the compiled graph with per-session RunnableConfig
+│   ├── OrchestratorService.java    # Speaker selection logic
+│   ├── ParticipantService.java     # ReAct loop — persona responds, optionally calling tools
+│   ├── SummarizerService.java      # Summary generation
+│   └── EvaluatorService.java       # Scores conversation on 3 dimensions, returns JSON scorecard
 └── tools/
-    ├── SingaporeNewsService.java    # Fetches Singapore news headlines
-    ├── SingaporeTimeService.java    # Returns current Singapore time
-    ├── SingaporeWeatherService.java # Returns Singapore weather info
-    └── ToolExecutor.java            # Routes tool calls to the right service
+    ├── SingaporeNewsService.java    # Returns Singapore news headlines
+    ├── SingaporeTimeService.java    # Returns current Singapore time (SGT)
+    ├── SingaporeWeatherService.java # Returns Singapore weather
+    └── ToolExecutor.java            # Routes TOOL:<name> calls to the right service
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-Key settings are in `src/main/resources/application.yml`:
+All settings live in `src/main/resources/application.yml`:
 
-| Setting | Default | Description |
+| Key | Default | Description |
 |---|---|---|
-| `langchain4j.open-ai.chat-model.model-name` | `gpt-4o-mini` | The OpenAI model to use |
-| `langchain4j.open-ai.chat-model.temperature` | `0.7` | Controls response creativity |
+| `langchain4j.open-ai.chat-model.model-name` | `gpt-4o-mini` | OpenAI model used by all agents |
+| `langchain4j.open-ai.chat-model.temperature` | `0.7` | Creativity level for agent responses |
+| `langchain4j.open-ai.chat-model.log-requests` | `true` | Logs full HTTP request to OpenAI |
+| `langchain4j.open-ai.chat-model.log-responses` | `true` | Logs full HTTP response from OpenAI |
 | `server.port` | `8080` | Port the app listens on |
 
-The number of conversation turns is controlled by `DEFAULT_VOLLEYS` in `KopitiamGraph.java` (default: **4 turns**). Increase it for longer conversations.
+**Conversation length** is controlled by `DEFAULT_VOLLEYS` in `KopitiamGraph.java` (default: **4 turns**). Increase it for longer conversations.
 
 ---
 
-## 💡 Example Conversation
+## 🧑‍⚖️ Evaluation Scorecard
 
-Here's what a typical run looks like in the logs:
+After every conversation the `evaluator_node` calls GPT-4o-mini with a structured judge prompt and scores the exchange on three dimensions:
 
-```
-[orchestrator] Selected: ah_seng
-[ah_seng]  Wah, today very hot lah! Must drink more kopi, keep awake lor.
+| Dimension | What It Measures |
+|---|---|
+| `character_consistency` | Did each agent stay true to their persona throughout? |
+| `conversation_naturalness` | Did the conversation flow organically, like real kopitiam banter? |
+| `tool_usage_correctness` | Were tools (time / weather / news) called only when genuinely needed? |
 
-[orchestrator] Selected: mei_qi
-[mei_qi]   Yasss, kopi is life! ☕️ Did anyone try the new prata stall? Cheese prata is da bomb! 🤤
-
-[orchestrator] Selected: bala
-[bala]     Ah, kopi and prata — the quintessential Singaporean combination. 
-           I'll need to analyse the data before endorsing the cheese prata, though.
-
-[summarizer] Kopitiam Banter Summary: The group bonded over hot weather, rising kopi prices, 
-             and excitement about a new prata stall. Mood: upbeat. Cultural pride: high.
-```
+Each dimension gets a score of 1–5 with a one-sentence reason. An `overall` score (1–5) and a one-sentence `summary` verdict are also returned. The scorecard is embedded directly in the API response as structured JSON.
 
 ---
 
-## 🤝 Contributing
+## 💡 Example Conversation Flow
 
-Feel free to:
-- Add new personas in `PersonaRegistry.java`
-- Add new tools in the `tools/` package and register them in `ToolExecutor.java`
-- Tweak the orchestrator prompt in `OrchestratorNode.java` to change conversation dynamics
+```
+You: Hello everyone! What's happening at the kopitiam today?
+
+[orchestrator] → selected: ah_seng
+Ah Seng:  Wah, today very hot lah! Must drink more kopi, keep awake lor.
+          You all try the new kaya toast or not? Very nice, leh!
+
+[orchestrator] → selected: mei_qi
+Mei Qi:   OMG, I haven't tried it yet! 😍 Must go get some later!
+          Anyone know if they serve it with half-boiled eggs? That's the best combo, yasss! 🥚✨
+
+[orchestrator] → selected: bala
+Bala:     Ah, the new kaya toast — an intriguing variable in our breakfast equation.
+          If they serve it with half-boiled eggs, satisfaction levels would increase by a
+          significant margin, statistically speaking. Must try later, confirm!
+
+[summarizer] → Kopitiam Conversation Summary:
+  Key topics: Hot weather, new kaya toast, ideal breakfast combos.
+  Dynamics: Casual and lively, mix of enthusiasm and dry analytical humour.
+  Mood: Light-hearted and jovial.
+
+[evaluator] → Score: 5/5
+  "A lively and authentic kopitiam exchange with strong character voices and natural topic flow."
+```
 
 ---
 

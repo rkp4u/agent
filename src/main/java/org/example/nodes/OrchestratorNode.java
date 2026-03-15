@@ -5,10 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.service.OrchestratorService;
 import org.springframework.stereotype.Component;
 
-/**
- * OrchestratorNode - Selects the next speaker via LLM.
- * Called directly from KopitiamGraph as a node action.
- */
+
 @Slf4j
 @Component
 @RequiredArgsConstructor

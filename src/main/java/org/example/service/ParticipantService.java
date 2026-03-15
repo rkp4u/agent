@@ -16,16 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * ParticipantService - Java equivalent of the participant() agent in agents.py.
- *
- * Implements a ReAct (Reason + Act) loop:
- *   1. Build system prompt from persona definition
- *   2. Call LLM with full conversation history
- *   3. If LLM wants a tool → execute it → feed result back
- *   4. Repeat until LLM gives a final response
- *   5. Return the response as a new message
- */
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -104,8 +95,8 @@ public class ParticipantService {
             finalResponse = persona.getName() + ": Aiyah, I don't know what to say lah!";
         }
 
-        // Print to console (mirrors nodes.py participant_node print)
-        System.out.println(finalResponse);
+        // Log the final response
+        log.info(finalResponse);
 
         return Map.of(
                 "role",    "assistant",
