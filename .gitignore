@@ -1,8 +1,6 @@
+
 .gradle
 build/
-
-# Secrets — never push
-.env
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
@@ -44,3 +42,7 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Secrets — never commit these ###
+.env
+src/main/resources/application.yml
